@@ -4,247 +4,934 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>osu!mania 4K Web Player</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body {
-            background-color: #0d1117;
-            color: #ffffff;
+            background-color: #0f0f13;
+            color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
+            height: 100vh;
             overflow: hidden;
         }
 
-        #game-container {
+        #bg-full, #video-full {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            object-fit: cover;
+            z-index: 1;
+            display: none;
+            filter: brightness(0.3);
+            transition: filter 0.2s ease;
+        }
+
+        .card {
+            background: rgba(22, 22, 30, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            width: 440px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            z-index: 10;
+            text-align: center;
             position: relative;
-            width: 360px;
-            height: 100vh;
-            background-color: #121820;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+
+        h2 { margin-bottom: 4px; font-size: 22px; color: #ff66aa; text-shadow: 0 0 10px rgba(255,102,170,0.3); }
+        p { color: #aaa; font-size: 13px; margin-bottom: 16px; }
+
+        .drop-zone {
+            border: 2px dashed #ff66aa;
+            border-radius: 12px;
+            padding: 30px 20px;
+            cursor: pointer;
+            background: rgba(255, 102, 170, 0.05);
+            transition: all 0.2s ease;
+            margin-bottom: 16px;
+        }
+        .drop-zone:hover, .drop-zone.hover {
+            background: rgba(255, 102, 170, 0.15);
+            border-color: #ff99cc;
+            transform: translateY(-2px);
+        }
+
+        .config-section {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 14px;
+            text-align: left;
+            font-size: 12px;
             display: flex;
             flex-direction: column;
-            justify-content: flex-end;
-            border-left: 2px solid #21262d;
-            border-right: 2px solid #21262d;
+            gap: 10px;
+        }
+        .config-title { color: #ff66aa; font-weight: bold; font-size: 13px; }
+        .config-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        /* HUD - Puntuación e Info */
-        #hud {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            text-align: right;
-            z-index: 10;
+        .keys-container {
+            display: flex;
+            gap: 5px;
+            align-items: center;
         }
 
-        #score {
-            font-size: 28px;
+        .key-btn {
+            background: #2a2a38;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 5px 0;
+            border-radius: 6px;
+            cursor: pointer;
             font-weight: bold;
             font-family: monospace;
-            letter-spacing: 2px;
+            width: 32px;
+            text-align: center;
+            font-size: 12px;
+        }
+        .key-btn.listening {
+            border-color: #ff66aa;
+            background: #ff66aa;
+            color: #000;
+            animation: pulse 0.8s infinite alternate;
         }
 
-        #accuracy {
-            font-size: 14px;
-            color: #8b949e;
+        @keyframes pulse {
+            from { opacity: 0.6; }
+            to { opacity: 1; }
         }
 
-        #kps {
-            font-size: 14px;
-            color: #ff66aa;
-            font-weight: bold;
-            margin-top: 4px;
+        .select-skin {
+            background: #2a2a38;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 6px;
+            outline: none;
+            cursor: pointer;
+            font-size: 12px;
+            width: 140px;
         }
 
-        /* Carriles (Lanes) */
-        #playfield {
+        .diff-selector { display: none; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; margin-bottom: 15px; }
+        .diff-card {
+            background: #252533;
+            border: 1px solid #3d3d52;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
             display: flex;
-            width: 100%;
-            height: 100%;
-            position: relative;
-        }
-
-        .lane {
-            flex: 1;
-            height: 100%;
-            border-right: 1px solid rgba(255, 255, 255, 0.05);
-            position: relative;
-            /* SE ELIMINÓ TODO TIPO DE LUZ O CAMBIO DE COLOR DE FONDO */
-            background-color: transparent !important;
-        }
-
-        .lane:last-child {
-            border-right: none;
-        }
-
-        /* Receptores de Teclas (Key Position Indicators) */
-        #key-container {
-            display: flex;
-            width: 100%;
-            height: 90px;
-            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
-            position: absolute;
-            bottom: 0;
-            z-index: 5;
-        }
-
-        .key-wrapper {
-            flex: 1;
-            display: flex;
-            justify-content: center;
+            justify-content: space-between;
             align-items: center;
+            transition: 0.2s;
+            text-align: left;
         }
+        .diff-card:hover { background: #323245; border-color: #ff66aa; transform: scale(1.01); }
+        .stars { color: #f1c40f; font-weight: bold; font-size: 12px; }
 
-        .key-circle {
-            width: 65px;
-            height: 65px;
-            border-radius: 50%;
-            border: 3px solid;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-weight: bold;
-            font-size: 18px;
-            transition: transform 0.05s ease;
-            background-color: rgba(18, 24, 32, 0.6);
+        .controls { display: flex; gap: 8px; justify-content: center; align-items: center; }
+        .btn-speed {
+            background: #ff66aa; border: none; color: white;
+            width: 24px; height: 24px; border-radius: 50%;
+            cursor: pointer; font-weight: bold; font-size: 14px;
+            display: flex; justify-content: center; align-items: center;
         }
+        .btn-speed:hover { background: #ff4093; }
 
-        /* Colores estándar osu!mania 4K */
-        .lane-0 .key-circle { border-color: #3498db; color: #3498db; }
-        .lane-1 .key-circle { border-color: #e74c3c; color: #e74c3c; }
-        .lane-2 .key-circle { border-color: #e74c3c; color: #e74c3c; }
-        .lane-3 .key-circle { border-color: #3498db; color: #3498db; }
-
-        /* Efecto de pulsado SOLO en la tecla/círculo (sin iluminar la columna) */
-        .key-circle.pressed {
-            transform: scale(0.88);
-            background-color: rgba(255, 255, 255, 0.2);
-        }
-
-        /* Menú de Pausa */
-        #pause-menu {
+        #game-container {
+            position: relative;
+            z-index: 10;
             display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            background: rgba(10, 10, 15, 0.9);
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            border-left: 2px solid rgba(255,255,255,0.1);
+            border-right: 2px solid rgba(255,255,255,0.1);
+        }
+
+        #pause-menu {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.85);
-            z-index: 20;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             gap: 15px;
+            z-index: 20;
         }
-
-        #pause-menu h2 {
-            font-size: 32px;
-            color: #ff66aa;
-            margin-bottom: 10px;
-        }
-
-        .btn {
-            padding: 10px 25px;
-            font-size: 16px;
-            border: none;
-            border-radius: 5px;
-            background-color: #21262d;
-            color: #fff;
+        .pause-btn {
+            background: #2a2a38;
+            border: 1px solid #ff66aa;
+            color: white;
+            padding: 10px 30px;
+            border-radius: 8px;
             cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            width: 180px;
             transition: 0.2s;
         }
+        .pause-btn:hover { background: #ff66aa; transform: scale(1.05); }
 
-        .btn:hover {
-            background-color: #ff66aa;
+        .btn-cancel {
+            background: transparent;
+            border: 1px solid #ff4757;
+            color: #ff4757;
+            padding: 6px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 10px;
         }
+        .btn-cancel:hover { background: #ff4757; color: white; }
+
+        input[type="range"] { accent-color: #ff66aa; }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
     </style>
 </head>
 <body>
 
+    <img id="bg-full" alt="Fondo">
+    <video id="video-full" loop muted></video>
+
+    <div class="card" id="main-card">
+        <h2>osu!mania 4K Web Player</h2>
+        <p>Arrastra tu mapa (.osz) o selecciona uno</p>
+
+        <div class="drop-zone" id="drop-zone">
+            <span style="font-size: 28px;">🎵</span>
+            <p style="margin: 8px 0 0 0; color:#fff; font-weight:bold;">Suelta tu archivo .osz aquí</p>
+            <input type="file" id="file-input" accept=".osz" style="display: none;">
+        </div>
+
+        <div class="diff-selector" id="diff-selector">
+            <h3 id="song-title" style="font-size: 15px; color: #fff;"></h3>
+            <p id="song-artist" style="margin-bottom: 10px;"></p>
+            <div id="diff-list"></div>
+            <button class="btn-cancel" id="btn-cancel">Cargar otro mapa</button>
+        </div>
+
+        <div class="config-section">
+            <div class="config-title">⚙️ Ajustes de Juego</div>
+            
+            <div class="config-row">
+                <span>Skin de Notas:</span>
+                <select id="skin-select" class="select-skin">
+                    <option value="circle">Círculo (STD)</option>
+                    <option value="thin">Barra Fina (Mania)</option>
+                    <option value="bar">Barra Gruesa</option>
+                    <option value="custom">Personalizada (.osk / PNG)</option>
+                </select>
+            </div>
+
+            <div class="config-row">
+                <span>Cargar Skin Custom:</span>
+                <button class="key-btn" id="btn-upload-skin" style="width: auto; padding: 4px 10px;">📁 Cargar .osk / PNG</button>
+                <input type="file" id="custom-skin-input" accept=".osk,.zip,.png" style="display: none;">
+            </div>
+
+            <div class="config-row">
+                <span>Teclas (Haz clic para cambiar):</span>
+                <div class="keys-container">
+                    <button class="key-btn" data-index="0">A</button>
+                    <button class="key-btn" data-index="1">Z</button>
+                    <button class="key-btn" data-index="2">X</button>
+                    <button class="key-btn" data-index="3">,</button>
+                </div>
+            </div>
+
+            <div class="config-row">
+                <span>Scroll Speed (1-40):</span>
+                <div class="controls">
+                    <button class="btn-speed" id="speed-down">-</button>
+                    <span id="speed-val" style="font-weight: bold; width: 20px; text-align: center;">20</span>
+                    <button class="btn-speed" id="speed-up">+</button>
+                </div>
+            </div>
+
+            <div class="config-row">
+                <span>Oscurecer Fondo (BG Dim):</span>
+                <div>
+                    <input type="range" id="bg-dim-slider" min="0" max="100" value="70">
+                    <span id="bg-dim-val">70%</span>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 12px; font-size: 11px; opacity: 0.7; text-align: left;">
+            📌 <b>Estado de Carga:</b><br>
+            Audio System: <span id="audio-status-text" style="color:#2ecc71;">Listo</span> | 
+            Skin: <span id="skin-status-text" style="color:#ff66aa;">Predeterminada</span>
+        </div>
+    </div>
+
     <div id="game-container">
-        <!-- HUD -->
-        <div id="hud">
-            <div id="score">0000000</div>
-            <div id="accuracy">100.00%</div>
-            <div id="kps">0 KPS</div>
-        </div>
-
-        <!-- Playfield sin luces de fondo -->
-        <div id="playfield">
-            <div class="lane lane-0"></div>
-            <div class="lane lane-1"></div>
-            <div class="lane lane-2"></div>
-            <div class="lane lane-3"></div>
-        </div>
-
-        <!-- Controles inferiores (A, S, K, L) -->
-        <div id="key-container">
-            <div class="key-wrapper lane-0"><div class="key-circle" id="key-0">A</div></div>
-            <div class="key-wrapper lane-1"><div class="key-circle" id="key-1">S</div></div>
-            <div class="key-wrapper lane-2"><div class="key-circle" id="key-2">K</div></div>
-            <div class="key-wrapper lane-3"><div class="key-circle" id="key-3">L</div></div>
-        </div>
-
-        <!-- Menú de Pausa -->
+        <canvas id="canvas" width="360" height="600"></canvas>
         <div id="pause-menu">
-            <h2>PAUSA</h2>
-            <button class="btn" onclick="togglePause()">Continuar (ESC)</button>
+            <h2 style="color: #ff66aa; font-size: 28px; margin-bottom: 10px;">PAUSA</h2>
+            <button class="pause-btn" id="pause-resume">Continuar</button>
+            <button class="pause-btn" id="pause-retry">Reiniciar</button>
+            <button class="pause-btn" id="pause-exit" style="border-color: #ff4757;">Salir</button>
         </div>
     </div>
 
     <script>
-        const keyMap = {
-            'a': 0, 'A': 0,
-            's': 1, 'S': 1,
-            'k': 2, 'K': 2,
-            'l': 3, 'L': 3
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const diffSelector = document.getElementById('diff-selector');
+        const diffList = document.getElementById('diff-list');
+        const songTitle = document.getElementById('song-title');
+        const songArtist = document.getElementById('song-artist');
+        const gameContainer = document.getElementById('game-container');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const btnCancel = document.getElementById('btn-cancel');
+        const speedValDisplay = document.getElementById('speed-val');
+        const speedUpBtn = document.getElementById('speed-up');
+        const speedDownBtn = document.getElementById('speed-down');
+        const bgFull = document.getElementById('bg-full');
+        const videoFull = document.getElementById('video-full');
+        const keyBtns = document.querySelectorAll('.keys-container .key-btn');
+        const bgDimSlider = document.getElementById('bg-dim-slider');
+        const bgDimVal = document.getElementById('bg-dim-val');
+        const skinSelect = document.getElementById('skin-select');
+        const pauseMenu = document.getElementById('pause-menu');
+        const skinStatusText = document.getElementById('skin-status-text');
+        const audioStatusText = document.getElementById('audio-status-text');
+        const btnUploadSkin = document.getElementById('btn-upload-skin');
+        const customSkinInput = document.getElementById('custom-skin-input');
+        
+        let customLaneImages = [new Image(), new Image(), new Image(), new Image()];
+        let hasCustomSkin = false;
+
+        let keyBinds = JSON.parse(localStorage.getItem('osu_keys')) || [
+            { code: 'KeyA', label: 'A' }, { code: 'KeyZ', label: 'Z' },
+            { code: 'KeyX', label: 'X' }, { code: 'Comma', label: ',' }
+        ];
+        let bgDim = parseInt(localStorage.getItem('osu_bg_dim')) || 70;
+        let selectedSkin = localStorage.getItem('osu_skin') || 'circle';
+
+        bgDimSlider.value = bgDim;
+        bgDimVal.textContent = `${bgDim}%`;
+        skinSelect.value = selectedSkin;
+
+        bgDimSlider.oninput = () => {
+            bgDim = bgDimSlider.value;
+            bgDimVal.textContent = `${bgDim}%`;
+            localStorage.setItem('osu_bg_dim', bgDim);
         };
 
-        let isPaused = false;
+        skinSelect.onchange = () => {
+            selectedSkin = skinSelect.value;
+            localStorage.setItem('osu_skin', selectedSkin);
+        };
 
-        // Mapeo de teclas para eventos de presionar
+        btnUploadSkin.onclick = () => customSkinInput.click();
+        customSkinInput.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.name.endsWith('.osk') || file.name.endsWith('.zip')) {
+                try {
+                    const oskZip = await JSZip.loadAsync(file);
+                    const allPngKeys = Object.keys(oskZip.files).filter(f => f.toLowerCase().endsWith('.png'));
+
+                    if (allPngKeys.length === 0) return alert('El .osk no tiene PNGs.');
+
+                    let noteImages = allPngKeys.filter(f => f.toLowerCase().includes('mania-note') || f.toLowerCase().includes('note-'));
+                    if (noteImages.length === 0) noteImages = allPngKeys;
+
+                    for (let i = 0; i < 4; i++) {
+                        let targetKey = noteImages.find(f => f.toLowerCase().includes(`${i+1}`));
+                        if (!targetKey) targetKey = noteImages[i % noteImages.length];
+                        const blob = await oskZip.files[targetKey].async('blob');
+                        customLaneImages[i].src = URL.createObjectURL(blob);
+                    }
+
+                    hasCustomSkin = true;
+                    selectedSkin = 'custom';
+                    skinSelect.value = 'custom';
+                    localStorage.setItem('osu_skin', 'custom');
+                    skinStatusText.textContent = `Cargada`;
+                } catch (err) { alert('Error leyendo .osk'); }
+            } else {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    for (let i = 0; i < 4; i++) customLaneImages[i].src = event.target.result;
+                    hasCustomSkin = true;
+                    selectedSkin = 'custom';
+                    skinSelect.value = 'custom';
+                    localStorage.setItem('osu_skin', 'custom');
+                    skinStatusText.textContent = `PNG Cargado`;
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
+        let listeningKeyIndex = -1;
+        function updateKeyUI() {
+            keyBtns.forEach((btn, idx) => {
+                if (keyBinds[idx]) btn.textContent = keyBinds[idx].label;
+            });
+            localStorage.setItem('osu_keys', JSON.stringify(keyBinds));
+        }
+
+        keyBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.target.dataset.index);
+                listeningKeyIndex = (listeningKeyIndex === idx) ? -1 : idx;
+                keyBtns.forEach(b => b.classList.remove('listening'));
+                if (listeningKeyIndex !== -1) btn.classList.add('listening');
+            });
+        });
+
         window.addEventListener('keydown', (e) => {
-            // FIX 1: ÚNICAMENTE la tecla ESCAPE maneja la pausa (se eliminó la 'P')
-            if (e.key === 'Escape') {
+            if (listeningKeyIndex !== -1) {
+                e.preventDefault();
+                let label = e.key.toUpperCase();
+                if (e.code === 'Space') label = 'SPC';
+                if (e.code === 'Comma') label = ',';
+                keyBinds[listeningKeyIndex] = { code: e.code, label: label.substring(0, 3) };
+                keyBtns[listeningKeyIndex].classList.remove('listening');
+                listeningKeyIndex = -1;
+                updateKeyUI();
+                return;
+            }
+
+            if (e.code === 'Escape') {
                 togglePause();
                 return;
             }
 
-            if (isPaused) return;
-
-            if (keyMap[e.key] !== undefined) {
-                const laneIndex = keyMap[e.key];
-                const keyCircle = document.getElementById(`key-${laneIndex}`);
-                if (keyCircle) {
-                    keyCircle.classList.add('pressed');
+            for (let i = 0; i < 4; i++) {
+                if (e.code === keyBinds[i].code && !keyStates[i]) {
+                    keyStates[i] = true;
+                    keyPressTimestamps.push(Date.now());
+                    processHit(i);
                 }
             }
         });
 
-        // Mapeo de teclas para eventos de soltar
         window.addEventListener('keyup', (e) => {
-            if (keyMap[e.key] !== undefined) {
-                const laneIndex = keyMap[e.key];
-                const keyCircle = document.getElementById(`key-${laneIndex}`);
-                if (keyCircle) {
-                    keyCircle.classList.remove('pressed');
+            for (let i = 0; i < 4; i++) {
+                if (e.code === keyBinds[i].code) {
+                    keyStates[i] = false;
                 }
             }
         });
 
-        // Función de Pausa
+        updateKeyUI();
+
+        const COLUMN_COLORS = ['#3498db', '#e74c3c', '#e74c3c', '#3498db']; 
+        const LANE_WIDTH = canvas.width / 4;
+        const TARGET_Y = canvas.height - 85;
+        let scrollSpeed = 20; 
+
+        const JUDGMENTS = [
+            { name: 'MAX', window: 16, score: 300, color: '#00e5ff' },
+            { name: '300', window: 40, score: 300, color: '#f1c40f' },
+            { name: '200', window: 73, score: 200, color: '#2ecc71' },
+            { name: '100', window: 103, score: 100, color: '#e67e22' },
+            { name: '50', window: 127, score: 50, color: '#9b59b6' },
+            { name: 'MISS', window: 150, score: 0, color: '#e74c3c' }
+        ];
+
+        let zipInstance, parsedMaps = [], hitObjects = [], currentMapMeta;
+        let keyStates = [false, false, false, false];
+        let audio = new Audio(), isPlaying = false, isPaused = false, isCountingDown = false, isEnded = false;
+        let countdownValue = 3, countdownTimer = null;
+        let score = 0, combo = 0, maxCombo = 0, totalNotes = 0, processedNotes = 0, accuracy = 100, accuracyPoints = 0, missCount = 0;
+        let lastJudgment = { text: '', color: '#fff', alpha: 0 };
+        let keyPressTimestamps = [];
+
+        speedUpBtn.onclick = () => setScrollSpeed(scrollSpeed + 1);
+        speedDownBtn.onclick = () => setScrollSpeed(scrollSpeed - 1);
+        function setScrollSpeed(val) { scrollSpeed = Math.max(1, Math.min(40, Math.round(val))); speedValDisplay.textContent = scrollSpeed; }
+
+        dropZone.onclick = () => fileInput.click();
+        fileInput.onchange = (e) => handleFile(e.target.files[0]);
+
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('hover');
+        });
+
+        window.addEventListener('dragleave', (e) => {
+            if (e.clientX === 0 || e.clientY === 0) {
+                dropZone.classList.remove('hover');
+            }
+        });
+
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('hover');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        btnCancel.onclick = resetToDropZone;
+
+        function resetToDropZone() {
+            stopGame();
+            diffSelector.style.display = 'none';
+            dropZone.style.display = 'block';
+            document.getElementById('main-card').style.display = 'block';
+            gameContainer.style.display = 'none';
+            fileInput.value = '';
+            audioStatusText.textContent = "Listo";
+        }
+
+        async function handleFile(file) {
+            if (!file || !file.name.endsWith('.osz')) return alert('Por favor arrastra un archivo con extensión .osz válido.');
+            try {
+                audioStatusText.textContent = "Procesando .osz...";
+                zipInstance = await JSZip.loadAsync(file);
+                parsedMaps = [];
+                for (const fileName in zipInstance.files) {
+                    if (fileName.endsWith('.osu')) {
+                        const content = await zipInstance.files[fileName].async('string');
+                        const mapData = parseOsuMeta(content, fileName);
+                        if (mapData && mapData.keyCount === 4) parsedMaps.push({ ...mapData, rawContent: content });
+                    }
+                }
+                if (!parsedMaps.length) return alert('No se encontraron dificultades de 4 Teclas (4K) en este mapa.');
+                showDifficultyMenu();
+            } catch (e) { 
+                alert('Error al procesar el archivo .osz'); 
+            }
+        }
+
+        function parseOsuMeta(content, fileName) {
+            const lines = content.split('\n');
+            let meta = { fileName, title: 'Unknown', artist: 'Unknown', version: 'Normal', creator: 'Unknown', keyCount: 4, audioFilename: '', bgFilename: '', videoFilename: '', stars: 0 };
+            let isGen = false, isMeta = false, isDiff = false, isEvent = false, noteCount = 0, totalTime = 1;
+
+            for (let line of lines) {
+                line = line.trim();
+                if (line.startsWith('[')) {
+                    isGen = line === '[General]'; isMeta = line === '[Metadata]';
+                    isDiff = line === '[Difficulty]'; isEvent = line === '[Events]';
+                    continue;
+                }
+                if (isGen && line.startsWith('AudioFilename:')) meta.audioFilename = line.split(':')[1].trim();
+                if (isGen && line.startsWith('Mode:')) if (parseInt(line.split(':')[1].trim()) !== 3) meta.keyCount = 0;
+                if (isMeta && line.startsWith('Title:')) meta.title = line.substring(6).trim();
+                if (isMeta && line.startsWith('Artist:')) meta.artist = line.substring(7).trim();
+                if (isMeta && line.startsWith('Version:')) meta.version = line.substring(8).trim();
+                if (isMeta && line.startsWith('Creator:')) meta.creator = line.substring(8).trim();
+                if (isDiff && line.startsWith('CircleSize:')) meta.keyCount = parseInt(line.split(':')[1].trim());
+
+                if (isEvent) {
+                    if (line.startsWith('Video,') || line.startsWith('1,')) {
+                        const parts = line.split(',');
+                        if (parts.length >= 3) meta.videoFilename = parts[2].replace(/"/g, '').trim();
+                    } else if (line.startsWith('0,0,')) {
+                        const parts = line.split(',');
+                        if (parts.length >= 3) meta.bgFilename = parts[2].replace(/"/g, '').trim();
+                    }
+                }
+                if (line.includes(',') && !line.startsWith('[')) {
+                    const parts = line.split(',');
+                    if (parts.length >= 5) {
+                        noteCount++;
+                        totalTime = Math.max(totalTime, parseInt(parts[2]) / 1000);
+                    }
+                }
+            }
+            meta.stars = Math.min(10, Math.max(0.5, (noteCount / totalTime) * 0.8)).toFixed(2);
+            return meta;
+        }
+
+        function showDifficultyMenu() {
+            dropZone.style.display = 'none';
+            diffSelector.style.display = 'flex';
+            diffList.innerHTML = '';
+            songTitle.textContent = parsedMaps[0].title;
+            songArtist.textContent = `de ${parsedMaps[0].artist}`;
+
+            parsedMaps.forEach((map) => {
+                const card = document.createElement('div');
+                card.className = 'diff-card';
+                card.innerHTML = `
+                    <div>
+                        <div style="font-weight:bold; font-size:14px;">${map.version} ${map.videoFilename ? '🎬' : ''}</div>
+                        <div style="font-size:11px; opacity:0.7;">Por: ${map.creator}</div>
+                    </div>
+                    <div class="stars">★ ${map.stars}</div>
+                `;
+                card.onclick = () => launchMap(map);
+                diffList.appendChild(card);
+            });
+        }
+
+        async function getAudioBlob(audioFilename) {
+            let fileKey = Object.keys(zipInstance.files).find(f => f.toLowerCase() === audioFilename.toLowerCase());
+            
+            if (!fileKey) {
+                fileKey = Object.keys(zipInstance.files).find(f => {
+                    const ext = f.toLowerCase();
+                    return ext.endsWith('.mp3') || ext.endsWith('.ogg') || ext.endsWith('.wav');
+                });
+            }
+
+            if (!fileKey) return null;
+
+            const arrayBuffer = await zipInstance.files[fileKey].async('arraybuffer');
+            let mimeType = 'audio/mpeg';
+            if (fileKey.toLowerCase().endsWith('.ogg')) mimeType = 'audio/ogg';
+            if (fileKey.toLowerCase().endsWith('.wav')) mimeType = 'audio/wav';
+
+            return new Blob([arrayBuffer], { type: mimeType });
+        }
+
+        async function launchMap(mapMeta) {
+            currentMapMeta = mapMeta;
+            document.getElementById('main-card').style.display = 'none';
+            gameContainer.style.display = 'flex';
+            pauseMenu.style.display = 'none';
+
+            hitObjects = parseHitObjects(mapMeta.rawContent);
+            totalNotes = hitObjects.length;
+            score = 0; combo = 0; maxCombo = 0; processedNotes = 0; accuracyPoints = 0; accuracy = 100; missCount = 0;
+            lastJudgment = { text: '', color: '#fff', alpha: 0 };
+            keyPressTimestamps = [];
+            isCountingDown = false;
+            isEnded = false;
+
+            if (countdownTimer) clearInterval(countdownTimer);
+
+            bgFull.style.display = 'none'; videoFull.style.display = 'none';
+            const brightness = (100 - bgDim) / 100;
+            bgFull.style.filter = `brightness(${brightness})`;
+            videoFull.style.filter = `brightness(${brightness})`;
+
+            let hasVid = false;
+            if (mapMeta.videoFilename) {
+                const vidKey = Object.keys(zipInstance.files).find(f => f.toLowerCase() === mapMeta.videoFilename.toLowerCase());
+                if (vidKey) {
+                    const vidBlob = await zipInstance.files[vidKey].async('blob');
+                    videoFull.src = URL.createObjectURL(vidBlob);
+                    videoFull.currentTime = 0;
+                    videoFull.style.display = 'block';
+                    hasVid = true;
+                }
+            }
+            if (!hasVid && mapMeta.bgFilename) {
+                const bgKey = Object.keys(zipInstance.files).find(f => f.toLowerCase() === mapMeta.bgFilename.toLowerCase());
+                if (bgKey) {
+                    const bgBlob = await zipInstance.files[bgKey].async('blob');
+                    bgFull.src = URL.createObjectURL(bgBlob);
+                    bgFull.style.display = 'block';
+                }
+            }
+
+            const audioBlob = await getAudioBlob(mapMeta.audioFilename);
+            if (audioBlob) {
+                if (audio.src) URL.revokeObjectURL(audio.src);
+                audio = new Audio();
+                audio.src = URL.createObjectURL(audioBlob);
+                audio.currentTime = 0;
+                audio.onended = () => { isEnded = true; };
+
+                setTimeout(() => {
+                    audio.play().catch(e => console.log("Autoplay prevenido:", e));
+                    if (hasVid) videoFull.play().catch(e => {});
+                    isPlaying = true;
+                    isPaused = false;
+                    requestAnimationFrame(gameLoop);
+                }, 400);
+            } else {
+                alert("No se pudo cargar la música del mapa.");
+                stopGameAndReturn();
+            }
+        }
+
+        function parseHitObjects(content) {
+            const lines = content.split('\n');
+            let isHit = false, objs = [];
+            for (let line of lines) {
+                line = line.trim();
+                if (line === '[HitObjects]') { isHit = true; continue; }
+                if (isHit && line) {
+                    const parts = line.split(',');
+                    if (parts.length >= 3) {
+                        const x = parseInt(parts[0]);
+                        const time = parseInt(parts[2]);
+                        objs.push({ lane: Math.min(3, Math.floor(x * 4 / 512)), time, hit: false, missed: false });
+                    }
+                }
+            }
+            return objs.sort((a, b) => a.time - b.time);
+        }
+
         function togglePause() {
-            isPaused = !isPaused;
-            const pauseMenu = document.getElementById('pause-menu');
-            pauseMenu.style.display = isPaused ? 'flex' : 'none';
+            if (!isPlaying || isCountingDown || isEnded) return;
+            if (!isPaused) {
+                isPaused = true;
+                audio.pause();
+                if (videoFull.style.display === 'block') videoFull.pause();
+                pauseMenu.style.display = 'flex';
+            } else {
+                resumeWithCountdown();
+            }
+        }
+
+        function resumeWithCountdown() {
+            pauseMenu.style.display = 'none';
+            isCountingDown = true;
+            countdownValue = 3;
+
+            if (countdownTimer) clearInterval(countdownTimer);
+            countdownTimer = setInterval(() => {
+                countdownValue--;
+                if (countdownValue <= 0) {
+                    clearInterval(countdownTimer);
+                    isCountingDown = false;
+                    isPaused = false;
+
+                    if (videoFull.style.display === 'block' && videoFull.src) {
+                        videoFull.currentTime = audio.currentTime;
+                        videoFull.play().catch(e => {});
+                    }
+
+                    audio.play().then(() => {
+                        requestAnimationFrame(gameLoop);
+                    }).catch(e => {});
+                }
+            }, 1000);
+        }
+
+        document.getElementById('pause-resume').onclick = () => { if (isPaused) resumeWithCountdown(); };
+        document.getElementById('pause-retry').onclick = () => launchMap(currentMapMeta);
+        document.getElementById('pause-exit').onclick = stopGameAndReturn;
+
+        function stopGame() {
+            isPlaying = false;
+            isPaused = false;
+            if (audio) { audio.pause(); audio.currentTime = 0; }
+            if (videoFull) { videoFull.pause(); videoFull.currentTime = 0; }
+            bgFull.style.display = 'none';
+            videoFull.style.display = 'none';
+        }
+
+        function stopGameAndReturn() {
+            stopGame();
+            gameContainer.style.display = 'none';
+            document.getElementById('main-card').style.display = 'block';
+        }
+
+        function processHit(lane) {
+            if (!isPlaying || isPaused || isCountingDown || isEnded) return;
+            const currentTime = audio.currentTime * 1000;
+            const note = hitObjects.find(n => n.lane === lane && !n.hit && !n.missed && Math.abs(n.time - currentTime) <= JUDGMENTS[JUDGMENTS.length - 1].window);
+            if (note) {
+                const delta = Math.abs(note.time - currentTime);
+                for (let j of JUDGMENTS) {
+                    if (delta <= j.window) { note.hit = true; applyJudgment(j); break; }
+                }
+            }
+        }
+
+        function applyJudgment(j) {
+            lastJudgment = { text: j.name, color: j.color, alpha: 1.0 };
+            processedNotes++;
+            if (j.name === 'MISS') { combo = 0; missCount++; }
+            else { combo++; if (combo > maxCombo) maxCombo = combo; }
+            accuracyPoints += j.score;
+            accuracy = ((accuracyPoints / (processedNotes * 300)) * 100).toFixed(2);
+            score = Math.round((accuracyPoints / (totalNotes * 300)) * 1000000);
+        }
+
+        canvas.addEventListener('click', (e) => {
+            if (isEnded) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                if (x >= canvas.width / 2 - 80 && x <= canvas.width / 2 + 80 && y >= 360 && y <= 400) {
+                    stopGameAndReturn();
+                }
+            }
+        });
+
+        function gameLoop() {
+            if (!isPlaying) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (isEnded) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#ff66aa';
+                ctx.font = 'bold 26px sans-serif';
+                ctx.fillText('¡CANCIÓN COMPLETADA!', canvas.width / 2, 120);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 22px monospace';
+                ctx.fillText(`Score: ${score.toString().padStart(7, '0')}`, canvas.width / 2, 200);
+                ctx.fillText(`Precisión: ${accuracy}%`, canvas.width / 2, 240);
+                ctx.fillText(`Combo Máximo: ${maxCombo}x`, canvas.width / 2, 280);
+
+                ctx.fillStyle = '#ff66aa';
+                ctx.fillRect(canvas.width / 2 - 80, 360, 160, 40);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.fillText('Volver al Menú', canvas.width / 2, 385);
+
+                return;
+            }
+
+            const currentTime = audio.currentTime * 1000;
+            const now = Date.now();
+            const speedMultiplier = (scrollSpeed / 20) * 1.3;
+
+            keyPressTimestamps = keyPressTimestamps.filter(t => now - t <= 1000);
+            const currentKPS = keyPressTimestamps.length;
+
+            // Líneas divisoras de carril
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            for (let i = 1; i < 4; i++) {
+                ctx.beginPath(); ctx.moveTo(i * LANE_WIDTH, 0); ctx.lineTo(i * LANE_WIDTH, canvas.height); ctx.stroke();
+            }
+
+            // Iluminación suave al presionar
+            for (let i = 0; i < 4; i++) {
+                if (keyStates[i]) {
+                    ctx.fillStyle = COLUMN_COLORS[i];
+                    ctx.globalAlpha = 0.15;
+                    ctx.fillRect(i * LANE_WIDTH, 0, LANE_WIDTH, canvas.height);
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+
+            // Receptor / Teclas Circulares inferiores (Estilo de la captura)
+            for (let i = 0; i < 4; i++) {
+                const x = i * LANE_WIDTH;
+                const centerX = x + LANE_WIDTH / 2;
+                const centerY = TARGET_Y + 30;
+                const radius = (LANE_WIDTH - 20) / 2;
+
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                
+                if (keyStates[i]) {
+                    ctx.fillStyle = COLUMN_COLORS[i];
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = '#ffffff';
+                } else {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                    ctx.fill();
+                    ctx.strokeStyle = COLUMN_COLORS[i];
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = COLUMN_COLORS[i];
+                }
+
+                ctx.font = 'bold 15px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(keyBinds[i].label, centerX, centerY);
+                ctx.textBaseline = 'alphabetic';
+            }
+
+            // Renderizado de Notas (Skins)
+            hitObjects.forEach(note => {
+                if (note.hit) return;
+
+                const timeDiff = note.time - currentTime;
+                const y = TARGET_Y - (timeDiff * speedMultiplier);
+
+                if (timeDiff < -JUDGMENTS[JUDGMENTS.length - 1].window && !note.missed) {
+                    note.missed = true;
+                    applyJudgment(JUDGMENTS[JUDGMENTS.length - 1]);
+                }
+
+                if (y > -50 && y < canvas.height) {
+                    const x = note.lane * LANE_WIDTH;
+                    const centerX = x + LANE_WIDTH / 2;
+                    const radius = (LANE_WIDTH - 20) / 2;
+
+                    if (selectedSkin === 'custom' && hasCustomSkin && customLaneImages[note.lane].complete) {
+                        ctx.drawImage(customLaneImages[note.lane], x + 2, y - 9, LANE_WIDTH - 4, 27);
+                    } else if (selectedSkin === 'thin') { 
+                        ctx.fillStyle = COLUMN_COLORS[note.lane];
+                        ctx.fillRect(x + 4, y - 4, LANE_WIDTH - 8, 8);
+                    } else if (selectedSkin === 'bar') {
+                        ctx.fillStyle = COLUMN_COLORS[note.lane];
+                        ctx.fillRect(x + 2, y - 9, LANE_WIDTH - 4, 18);
+                    } else { 
+                        // CÍRCULOS (Skin de la captura)
+                        ctx.beginPath();
+                        ctx.arc(centerX, y, radius, 0, Math.PI * 2);
+                        ctx.fillStyle = COLUMN_COLORS[note.lane];
+                        ctx.fill();
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                }
+            });
+
+            // UI del Juego (Score, Combo, Acc, KPS)
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 20px monospace';
+            ctx.fillText(score.toString().padStart(7, '0'), canvas.width - 15, 30);
+            ctx.font = '14px monospace';
+            ctx.fillText(`${accuracy}%`, canvas.width - 15, 50);
+
+            ctx.textAlign = 'left';
+            ctx.fillText(`${currentKPS} KPS`, 15, 30);
+
+            if (combo > 0) {
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 28px sans-serif';
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(`${combo}x`, canvas.width / 2, TARGET_Y - 100);
+            }
+
+            if (lastJudgment.alpha > 0) {
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 22px sans-serif';
+                ctx.fillStyle = lastJudgment.color;
+                ctx.globalAlpha = lastJudgment.alpha;
+                ctx.fillText(lastJudgment.text, canvas.width / 2, TARGET_Y - 60);
+                ctx.globalAlpha = 1.0;
+                lastJudgment.alpha -= 0.02;
+            }
+
+            if (isCountingDown) {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#ff66aa';
+                ctx.font = 'bold 60px sans-serif';
+                ctx.fillText(countdownValue, canvas.width / 2, canvas.height / 2);
+            }
+
+            if (!isPaused) {
+                requestAnimationFrame(gameLoop);
+            }
         }
     </script>
 </body>
